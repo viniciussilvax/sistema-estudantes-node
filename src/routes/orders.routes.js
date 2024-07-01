@@ -3,7 +3,6 @@ const ordersController = require('../controllers/ordersController')
 const ordersRoutes = new Router()
 
 ordersRoutes.post('/', ordersController.postOrder)
-ordersRoutes.post('/:id', ordersController.postOrderById)
 ordersRoutes.get('/:id', ordersController.getOrderById)
 
 

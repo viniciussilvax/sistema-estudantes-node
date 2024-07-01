@@ -1,9 +1,12 @@
+const { where } = require("sequelize")
 const connection = require("../database")
 
 class OrderController {
     async postOrder(req, res) {
+
         try {
-            const { client_id, total, addres, observations } = req.body
+
+            const { client_id, addres, observations, products } = req.body
 
             const clientExist = await connection.query(`
             select * from clients where id = ${client_id}`)
@@ -12,40 +15,39 @@ class OrderController {
                 res.status(404).json({ messagem: "Cliente não cadastrado!" })
             }
 
-            await connection.query(`
-            insert into orders (client_id, total, addres, observations)
-            values (${client_id}, ${total}, '${addres}', '${observations}')`)
+
+            let totalPrice = 0
+
+            for (let product of products) {
+                const price = await connection.query(`
+                select price from products where id = ${product.id}`)
+                totalPrice += totalPrice + (price[0][0].price * product.amount)
+            }
+
+           const order = await connection.query(`
+            insert into orders (client_id, addres, observations, total)
+            values (${client_id}, '${addres}', '${observations}', ${totalPrice}) RETURNING *`)
+
+            products.forEach(async item => {
+                const prod = await connection.query(`
+                select price from products where id = ${item.id}`)
+
+                await connection.query(`
+                insert into orders_items (order_id, product_id, amount, price)
+                values(${order[0][0].id}, ${item.id}, ${item.amount}, ${prod[0][0].price})`)
+            });
 
             res.status(200).json({ messagem: "Pedido criado com sucesso!" })
+
+
         } catch (error) {
             res.json({ messagem: "Problema ao cadastrar pedido!" })
+            console.log(error)
         }
+
     }
 
-    async postOrderById(req, res) {
-        try {
-            const { order_id, product_id, amount, price } = req.body
-
-            const orderExist = await connection.query(`select * from orders where id = ${order_id}`)
-            if (orderExist[1].rowCount === 0) {
-                res.json({ messagem: "Pedido não existe" })
-            }
-            const productExist = await connection.query(`select * from products where id = ${product_id}`)
-            if (productExist[1].rowCount === 0) {
-                res.json({ messagem: "Produto não está cadastrado!" })
-            }
-
-            await connection.query(`
-            insert into orders_items (order_id, product_id, amount, price)
-            values (${order_id}, ${product_id}, ${amount}, ${price})`)
-
-            res.status(200).json({ messagem: "Produto adicionado ao carrinho!" })
-
-        } catch (error) {
-            res.json({ messagem: "Problema ao adicinar produto no carrinho!" })
-        }
-    }
-
+    
     async getOrderById(req, res) {
         const orderId = req.params.id
 
@@ -58,16 +60,15 @@ class OrderController {
         on oi.order_id = o.id
         inner join products p
         on oi.product_id = p.id
-        where o.id = ${orderId}
-            `)
+        where o.id = ${orderId}`)
 
-        if(orderExist[1].rowCount === 0) {
-            res.status(404).json({messagem: "Pedido não encontrado"})
+        if (orderExist[1].rowCount === 0) {
+            res.status(404).json({ messagem: "Pedido não encontrado" })
         } else {
-            res.json(orderExist[1].rows[0])
+            res.json(orderExist[0])
         }
-        
+
     }
 }
 
-module.exports = new OrderController()
+module.exports = new OrderController() 
